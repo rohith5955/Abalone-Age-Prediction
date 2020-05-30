@@ -1,0 +1,176 @@
+---
+title: "Abalone age prediciton"
+author: "Rohith Kumar Sajja"
+date: "March 6, 2020"
+output: html_notebook
+---
+
+This is an R Markdown Notebook to predict age of abalone.
+
+The goal of this project is to predict the number of rings in the abalone and thus predict the age.
+
+
+# 1. Data Description
+
+
+```{r}
+# Installing and loading required packages
+library(e1071)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(GGally)
+library(AppliedPredictiveModeling)
+library(caret)
+
+# Loading the abalone dataset
+abalone_0 <- read.csv('abalone.csv', na.strings = '?')
+
+# Structure of the dataset
+print(str(abalone_0))
+
+# Summary statistics
+summary(abalone_0)
+
+
+```
+
+
+
+Encode the Rings into 3 age buckets in a new column Age.
+
+1. Young - less than 6 rings (<7.5 years old)
+
+2. Adult - from 6 to 13 rings (7.5 to 14.5 years old) 
+
+3. Old - more than 13 rings (>14.5 years old) 
+
+
+
+```{r}
+
+# Transforming the dataset to include age bucket
+abalone <- abalone_0 %>%
+  mutate(Age=case_when(
+    Rings %in% 1:5 ~ "Young",
+    Rings %in% 6:13 ~ "Adult",
+    Rings %in% 14:30 ~ "Old"
+  ))
+
+# Converting Age into factor
+abalone$Age <- as.factor(abalone$Age)
+
+# Structure of modified data set
+str(abalone)
+
+
+# Summary statistics of modified data set
+summary(abalone)
+
+kable(abalone[1:10,], digits = 4,format = 'markdown')
+
+# Number of missing values
+nrow(abalone[!complete.cases(abalone),])
+
+```
+
+# 2. Exploratory Data Analysis
+
+### 2.1 Pair-wise correlation
+```{r}
+ggpairs(abalone, aes(colour = Sex, alpha = 0.1), title="Pairs plot for abalone dataset", upper = list(continuous = wrap("cor", size = 1))) + 
+  theme_grey(base_size = 10)
+```
+
+We can note that there is high correlation between a few measurements, such as Diameter and Length
+
+### 2.2 Rings
+
+```{r}
+# Plotting the frequency of abalone over number of rings
+ggplot(abalone, aes(x=Rings))+geom_bar(fill="steelblue",alpha=0.6)
+```
+
+
+### 2.3 Sex
+
+```{r}
+# Summary statistics
+summary(abalone$Wholeweight)
+
+# Density plot of Rings over Sex
+ggplot(abalone) + aes(Rings, fill = Sex) +  geom_density(alpha = 0.7)
+
+```
+
+As we can see Females have higher number of rings and thus we could say that they live longer.
+
+### 2.4 WholeWeight
+
+```{r}
+# Summary statistics
+summary(abalone$Wholeweight)
+```
+
+
+
+
+
+
+
+## 3. Model Selection 
+
+
+### 3.1 Testing and Evaluation metrics
+
+```{r}
+# Algorithms using 10-fold cross validation
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+metric <- "RMSE"
+seed <- 888
+```
+
+
+### 3.2 Model Generation (non-ensemble)
+
+
+```{r}
+# GLM
+set.seed(seed)
+fit.glm <- train(Rings~., data=abalone, method="glm", metric=metric, trControl=control)
+# LM
+set.seed(seed)
+fit.lm <- train(Rings~., data=abalone, method="lm", metric=metric, trControl=control)
+# SVM
+set.seed(seed)
+fit.svm <- train(Rings~., data=abalone, method="svmRadial", metric=metric, trControl=control)
+# kNN
+set.seed(seed)
+fit.knn <- train(Rings~., data=abalone, method="knn", metric=metric, trControl=control)
+
+```
+
+
+### 3.3 Algorithm Comparision
+
+
+```{r}
+results <- resamples(list(SVM=fit.svm, kNN=fit.knn, GLM=fit.glm, LM=fit.lm))
+summary(results)
+```
+
+
+
+```{r}
+dotplot(results)
+```
+
+
+# 4. Results Validation
+
+```{r}
+index <- best(fit.svm$results, metric, maximize=TRUE)
+config <- fit.svm$results[index,]
+print(config)
+```
+
